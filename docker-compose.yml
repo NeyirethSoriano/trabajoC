@@ -1,0 +1,76 @@
+services:
+
+  # ---------- API Node.js ----------
+  api:
+    build: .
+    image: api-fortaleza-nube:latest
+    container_name: api_node
+    init: true
+    # IMPORTANTE para la Fase 4: con "no" el contenedor NO revive solo
+    # después de /api/crash, así Uptime Kuma alcanza a detectar la caída.
+    # En producción real se usaría: unless-stopped
+    restart: "no"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+    expose:
+      - "8080"
+    # Publica el puerto solo si quieres probar directo por IP:8080.
+    # Con NPM al frente, lo ideal es dejarlo comentado.
+    ports:
+      - "8080:8080"
+    networks:
+      - red-interna
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------- Monitoreo ----------
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime_kuma
+    restart: unless-stopped
+    volumes:
+      - kuma_data:/app/data
+    expose:
+      - "3001"
+    networks:
+      - red-interna
+
+  # ---------- Logs en vivo ----------
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    environment:
+      - DOZZLE_NO_ANALYTICS=true
+    volumes:
+      # :ro = socket de Docker en solo lectura (hardening)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    expose:
+      - "8080"
+    networks:
+      - red-interna
+
+  # ---------- Reverse proxy + TLS ----------
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx_proxy_manager
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP / validación Let's Encrypt
+      - "443:443"    # HTTPS
+      - "81:81"      # Panel de administración de NPM
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - red-interna
+
+networks:
+  red-interna:
+    driver: bridge
+
+volumes:
+  kuma_data:
+  npm_data:
+  npm_letsencrypt:
