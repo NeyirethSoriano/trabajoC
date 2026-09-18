@@ -1,11 +1,20 @@
-# 4. Copiamos el resto del código ya con dueño 'node' (no root)
+# ---- Fase 1: Contenerización segura ----
+FROM node:20-alpine
+
+LABEL maintainer="aprendiz-adso"
+LABEL description="API Node.js endurecida para plan de mejoramiento"
+
+ENV NODE_ENV=production
+ENV PORT=8080
+
+WORKDIR /usr/src/app
+
+COPY --chown=node:node package*.json ./
+
+RUN npm ci --omit=dev && npm cache clean --force
+
 COPY --chown=node:node . .
 
-# 5. HARDENING:
-#    a) Parchear CVEs del sistema operativo base (libssl3/libcrypto3, etc.)
-#    b) Eliminar npm/npx/corepack de la imagen final: la app arranca con
-#       "node index.js", nunca con npm, y npm trae sus propias dependencias
-#       (tar, glob, minimatch, pacote...) que generan falsos positivos en Trivy
 RUN apk update && apk upgrade --no-cache \
     && rm -rf /usr/local/lib/node_modules/npm \
               /usr/local/lib/node_modules/corepack \
@@ -14,5 +23,11 @@ RUN apk update && apk upgrade --no-cache \
               /usr/local/bin/corepack \
               /opt/yarn-v1.22.22
 
-# 6. Usuario sin privilegios (el usuario 'node' ya existe en la imagen oficial)
 USER node
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/ || exit 1
+
+CMD ["node", "index.js"]
